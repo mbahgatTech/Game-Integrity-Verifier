@@ -4,29 +4,31 @@ if not "%1"=="am_admin" (powershell start -verb runas '%0' am_admin & exit /b)
 
 @REM set directory variables
 SET checkerPath=%~dp0%
-SET patchesFolder=PlutoPatchFiles%year%-%month%-%day%
+SET patchesFolder=PlutoPatchFiles%date:~10,4%-%date:~4,2%-%date:~7,2%
 SET gamePath=C:\Users\%USERNAME%\AppData\Local\Plutonium\storage\t6\scripts\zm
 
 echo Checking game files...
 CD %checkerPath%
 
-@REM Back up
+@REM Back up last folder
 if exist %patchesFolder% (
+    rmdir /s /q %patchesFolder%\prev
     MD /y temp
     XCOPY /y %patchesFolder% temp\
-    CD %patchesFolder%
-    for %%i in (*) do (DEL %%i)  
-    CD %checkerPath%
     rmdir /s /q %patchesFolder%
 )
 
 MD /y %patchesFolder%
 XCOPY /y  %gamePath% %patchesFolder%\
 
-@REM echo some stats about the patches
-dir %cd%\%patchesFolder% > stats
-CD %checkerPath%
+@REM Copy previous versions of the patches
+MD %patchesFolder%\prev
+XCOPY temp\ %patchesFolder%\prev\
+rmdir /s /q temp\
 
+@REM echo some stats about the patches
+dir %cd%\%patchesFolder% > %patchesFolder%\stats
+CD %checkerPath%
 
 :7z
 @REM Install 7-zip and copy executable to C:\Windows
@@ -70,6 +72,22 @@ DEL %checkerPath%\7z2107-x64.exe
 :upload
 @REM upload copies patches to google drive
 echo Uploading patches to google drive...
-gdrive.exe upload --recursive %patchesFolder%
-echo Uploaded patches successfully on %DATE% at %TIME%. >> stats
+gdrive.exe upload -r %patchesFolder%
+
+echo %patchesFolder% > tempFile.txt
+for %%? in (tempFile.txt) do ( SET /A len=%%~z? - 2 )
+gdrive.exe list --name-width %len% > tempFile.txt
+
+@REM Get ID of uploaded patches folder and share link 
+@REM All parsing is done using python script
+lib\dist\parseFile.exe
+FOR /F "tokens=* delims=" %%x in (tempFile.txt) DO SET folderID=%%x
+
+gdrive.exe share %folderID%
+gdrive.exe info %folderID% > tempFile.txt
+gdrive.exe info %folderID% >> %patchesFolder%\stats
+
+lib\dist\parseFile.exe url
+
+echo Uploaded patches successfully on %DATE% at %TIME%. >> %patchesFolder%\stats
 timeout /t 100
